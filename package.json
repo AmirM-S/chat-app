@@ -13,7 +13,7 @@
   "private": true,
   "workspaces": [
     "apps/*",
-    "dist/*"
+    "libs/*"
   ],
   "keywords": [],
   "author": "",
