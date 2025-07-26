@@ -4,7 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "npm run start --workspace=api-gateway",
+    "start:dev": "npm run start:dev --workspace=api-gateway",
+    "build": "npm run build --workspace=api-gateway"
+
   },
   "private": true,
   "workspaces": [
