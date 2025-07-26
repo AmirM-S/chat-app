@@ -21,7 +21,7 @@ import { Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
-import { Message } from './chat/message.schema';
+import { Message } from './message.schema';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway
