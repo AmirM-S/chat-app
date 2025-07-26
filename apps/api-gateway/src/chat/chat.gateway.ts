@@ -10,28 +10,31 @@
 
 // src/chat.gateway.ts
 import {
-  SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
+  SubscribeMessage,
   OnGatewayInit,
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from '@nestjs/websockets';
 import { Logger } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
+import { Message } from './chat/message.schema';
 
-@WebSocketGateway({
-  cors: {
-    origin: '*', // allow all origins (you can restrict this in prod)
-  },
-})
+@WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect
 {
   @WebSocketServer() server: Server;
-  private logger: Logger = new Logger('ChatGateway');
+  private logger = new Logger('ChatGateway');
 
-  afterInit() {
+  constructor(
+    @InjectModel(Message.name) private messageModel: Model<Message>,
+  ) {}
+
+  afterInit(server: Server) {
     this.logger.log('WebSocket Server Initialized');
   }
 
@@ -44,10 +47,14 @@ export class ChatGateway
   }
 
   @SubscribeMessage('send_message')
-  handleMessage(client: Socket, payload: any): void {
-    this.logger.log(
-      `Received message from ${client.id}: ${JSON.stringify(payload)}`,
-    );
-    this.server.emit('receive_message', payload); // broadcast to all clients
+  async handleMessage(client: Socket, payload: any): Promise<void> {
+    const saved = await this.messageModel.create({
+      senderId: payload.senderId,
+      receiverId: payload.receiverId,
+      message: payload.message,
+    });
+
+    this.logger.log(`Message saved: ${saved._id}`);
+    this.server.emit('receive_message', saved);
   }
 }
