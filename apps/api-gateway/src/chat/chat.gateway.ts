@@ -22,6 +22,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
 import { Message } from './message.schema';
+import { JwtService } from '@nestjs/jwt';
 
 @WebSocketGateway({ cors: { origin: '*' } })
 export class ChatGateway
@@ -32,6 +33,7 @@ export class ChatGateway
 
   constructor(
     @InjectModel(Message.name) private messageModel: Model<Message>,
+    private jwtService: JwtService
   ) {}
 
   afterInit(server: Server) {
@@ -39,22 +41,32 @@ export class ChatGateway
   }
 
   handleConnection(client: Socket) {
-    this.logger.log(`Client connected: ${client.id}`);
+    try {
+      const token = client.handshake.auth.token;
+      const payload = this.jwtService.verify(token, { secret: 'secret123' });
+      (client as any).user = payload;
+  
+      this.logger.log(`Client connected: ${client.id} (user: ${payload.username})`);
+    } catch (err) {
+      this.logger.warn(`Invalid token for client ${client.id}`);
+      client.disconnect();
+    }
   }
-
   handleDisconnect(client: Socket) {
     this.logger.log(`Client disconnected: ${client.id}`);
   }
 
   @SubscribeMessage('send_message')
-  async handleMessage(client: Socket, payload: any): Promise<void> {
-    const saved = await this.messageModel.create({
-      senderId: payload.senderId,
-      receiverId: payload.receiverId,
-      message: payload.message,
-    });
+async handleMessage(client: Socket, payload: any): Promise<void> {
+  const user = (client as any).user;
 
-    this.logger.log(`Message saved: ${saved._id}`);
-    this.server.emit('receive_message', saved);
-  }
+  const saved = await this.messageModel.create({
+    senderId: user.sub,
+    receiverId: payload.receiverId,
+    message: payload.message,
+  });
+
+  this.logger.log(`Message saved from ${user.username}`);
+  this.server.emit('receive_message', saved);
+}
 }

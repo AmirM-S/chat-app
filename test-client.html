@@ -1,63 +1,79 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
+  <head>
     <title>Chat Test Client</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
-</head>
-<body>
+  </head>
+  <body>
     <h1>Chat Test Client</h1>
-    
+
     <div>
-        <input type="text" id="senderId" placeholder="Sender ID" value="user123">
-        <input type="text" id="receiverId" placeholder="Receiver ID" value="user456">
-        <input type="text" id="message" placeholder="Message">
-        <button onclick="sendMessage()">Send Message</button>
+      <input
+        type="text"
+        id="senderId"
+        placeholder="Sender ID"
+        value="user123"
+      />
+      <input
+        type="text"
+        id="receiverId"
+        placeholder="Receiver ID"
+        value="user456"
+      />
+      <input type="text" id="message" placeholder="Message" />
+      <button onclick="sendMessage()">Send Message</button>
     </div>
-    
+
     <div id="messages"></div>
 
     <script>
-        const socket = io('http://localhost:3000'); // Adjust port as needed
-        
-        socket.on('connect', () => {
-            console.log('Connected to server');
-            document.getElementById('messages').innerHTML += '<p>Connected to server</p>';
-        });
-        
-        socket.on('receive_message', (message) => {
-            console.log('Received message:', message);
-            document.getElementById('messages').innerHTML += 
-                `<p><strong>${message.senderId}:</strong> ${message.message}</p>`;
-        });
-        
-        socket.on('error', (error) => {
-            console.error('Socket error:', error);
-            document.getElementById('messages').innerHTML += 
-                `<p style="color: red;">Error: ${error.message}</p>`;
-        });
-        
-        function sendMessage() {
-            const senderId = document.getElementById('senderId').value;
-            const receiverId = document.getElementById('receiverId').value;
-            const message = document.getElementById('message').value;
-            
-            if (!senderId || !receiverId || !message) {
-                alert('Please fill all fields');
-                return;
-            }
-            
-            const payload = {
-                senderId: senderId,
-                receiverId: receiverId,
-                message: message
-            };
-            
-            console.log('Sending payload:', payload);
-            socket.emit('send_message', payload);
-            
-            // Clear message input
-            document.getElementById('message').value = '';
+      const socket = io("http://localhost:3000", {
+        auth: {
+          token:
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Im1hc29uIiwic3ViIjoidXNlci1pZC0xMjMiLCJpYXQiOjE3NTM2MzI4NzEsImV4cCI6MTc1MzYzNjQ3MX0.oSxUfd7BjhVBzKvvPsptYtbPuf__4ueFcMAWcIhMD5s",
+        },
+      }); // Adjust port as needed
+
+      socket.on("connect", () => {
+        console.log("Connected to server");
+        document.getElementById("messages").innerHTML +=
+          "<p>Connected to server</p>";
+      });
+
+      socket.on("receive_message", (message) => {
+        console.log("Received message:", message);
+        document.getElementById("messages").innerHTML +=
+          `<p><strong>${message.senderId}:</strong> ${message.message}</p>`;
+      });
+
+      socket.on("error", (error) => {
+        console.error("Socket error:", error);
+        document.getElementById("messages").innerHTML +=
+          `<p style="color: red;">Error: ${error.message}</p>`;
+      });
+
+      function sendMessage() {
+        const senderId = document.getElementById("senderId").value;
+        const receiverId = document.getElementById("receiverId").value;
+        const message = document.getElementById("message").value;
+
+        if (!senderId || !receiverId || !message) {
+          alert("Please fill all fields");
+          return;
         }
+
+        const payload = {
+          senderId: senderId,
+          receiverId: receiverId,
+          message: message,
+        };
+
+        console.log("Sending payload:", payload);
+        socket.emit("send_message", payload);
+
+        // Clear message input
+        document.getElementById("message").value = "";
+      }
     </script>
-</body>
+  </body>
 </html>
