@@ -28,6 +28,8 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/platform-socket.io": "^11.1.5",
     "@nestjs/websockets": "^11.1.5",
+    "amqplib": "^0.10.8",
+    "dotenv": "^17.2.1",
     "mongoose": "^8.16.5",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
