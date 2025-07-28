@@ -63,8 +63,21 @@ export class ChatGateway
 
   @SubscribeMessage('chat:message')
   async handleMessage(@MessageBody() data: any): Promise<void> {
-    console.log('[WS] Incoming message:', data);
-    await this.rabbitMQService.publishToQueue('chat-messages', data);
+    const user = (data.client as any)?.user;
+    
+    // Format the message according to the expected schema
+    const formattedMessage = {
+      sender: user?.username || 'anonymous',
+      content: data.message,
+      room: data.room || 'default',
+      timestamp: new Date()
+    };
+
+    console.log('[WS] Incoming message:', formattedMessage);
+    await this.rabbitMQService.publishToQueue('chat-messages', formattedMessage);
+    
+    // Emit the message back to all connected clients
+    this.server.emit('chat:message', formattedMessage);
   }
 }
 // @SubscribeMessage('send_message')

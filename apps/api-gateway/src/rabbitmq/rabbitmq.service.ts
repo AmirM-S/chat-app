@@ -35,6 +35,22 @@ export class RabbitMQService implements OnModuleInit {
     if (!this.channel) {
       throw new Error('RabbitMQ channel not available');
     }
-    this.channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)), { persistent: true });
+    
+    const messageToSend = {
+      pattern: 'chat-messages',
+      data: message
+    };
+    
+    this.logger.debug(`Publishing message to queue ${queue}:`, messageToSend);
+    
+    this.channel.sendToQueue(
+      queue, 
+      Buffer.from(JSON.stringify(messageToSend)), 
+      { 
+        persistent: true,
+        contentType: 'application/json',
+        type: 'chat-messages'
+      }
+    );
   }
 }

@@ -6,18 +6,22 @@ import * as dotenv from 'dotenv';
 dotenv.config();
 
 async function bootstrap() {
-  const app = await NestFactory.createMicroservice<MicroserviceOptions>(AppModule, {
-    transport: Transport.RMQ,
-    options: {
-      urls: [process.env.RABBITMQ_URL || "amqp://localhost:5673"],
-      queue: 'chat-messages',
-      queueOptions: {
-        durable: false,
+  const app = await NestFactory.createMicroservice<MicroserviceOptions>(
+    AppModule,
+    {
+      transport: Transport.RMQ,
+      options: {
+        urls: ['amqp://guest:guest@localhost:5673'],
+        queue: 'chat-messages',
+        queueOptions: {
+          durable: true,
+        },
       },
     },
-  });
+  );
 
   await app.listen();
   console.log('[Chat-Service] Listening to RabbitMQ...');
 }
+
 bootstrap();

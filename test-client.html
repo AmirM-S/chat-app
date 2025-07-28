@@ -10,15 +10,9 @@
     <div>
       <input
         type="text"
-        id="senderId"
-        placeholder="Sender ID"
-        value="user123"
-      />
-      <input
-        type="text"
-        id="receiverId"
-        placeholder="Receiver ID"
-        value="user456"
+        id="room"
+        placeholder="Room Name"
+        value="default"
       />
       <input type="text" id="message" placeholder="Message" />
       <button onclick="sendMessage()">Send Message</button>
@@ -30,9 +24,9 @@
       const socket = io("http://localhost:3000", {
         auth: {
           token:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Im1hc29uIiwic3ViIjoidXNlci1pZC0xMjMiLCJpYXQiOjE3NTM2NDAxNDEsImV4cCI6MTc1MzcyNjU0MX0.CrY6ODDehTzbg3XzHckOQWTXzaGN-Rwpx1jx-EXTh08",
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Im1hc29uIiwic3ViIjoidXNlci1pZC0xMjMiLCJpYXQiOjE3NTM3MjYyNDksImV4cCI6MTc1MzgxMjY0OX0.l_M0Be1QLfh9GuNLAhWXy2zQ-dXe7-vd2dvY3HNffL4",
         },
-      }); // Adjust port as needed
+      });
 
       socket.on("connect", () => {
         console.log("Connected to server");
@@ -40,10 +34,10 @@
           "<p>Connected to server</p>";
       });
 
-      socket.on("receive_message", (message) => {
+      socket.on("chat:message", (message) => {
         console.log("Received message:", message);
         document.getElementById("messages").innerHTML +=
-          `<p><strong>${message.senderId}:</strong> ${message.message}</p>`;
+          `<p><strong>${message.sender}:</strong> ${message.content}</p>`;
       });
 
       socket.on("error", (error) => {
@@ -53,23 +47,21 @@
       });
 
       function sendMessage() {
-        const senderId = document.getElementById("senderId").value;
-        const receiverId = document.getElementById("receiverId").value;
+        const room = document.getElementById("room").value;
         const message = document.getElementById("message").value;
 
-        if (!senderId || !receiverId || !message) {
-          alert("Please fill all fields");
+        if (!message) {
+          alert("Please enter a message");
           return;
         }
 
         const payload = {
-          senderId: senderId,
-          receiverId: receiverId,
           message: message,
+          room: room
         };
 
         console.log("Sending payload:", payload);
-        socket.emit("send_message", payload);
+        socket.emit("chat:message", payload);
 
         // Clear message input
         document.getElementById("message").value = "";

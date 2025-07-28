@@ -6,7 +6,7 @@ import * as dotenv from 'dotenv';
 // Load environment variables
 dotenv.config();
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { cors: true });
   await app.listen(process.env.PORT ?? 3000);
 }
 bootstrap();
