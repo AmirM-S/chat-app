@@ -46,6 +46,12 @@
           `<p style="color: red;">Error: ${error.message}</p>`;
       });
 
+      socket.on("new_message", (message) => {
+        console.log("Received message:", message);
+        document.getElementById("messages").innerHTML +=
+          `<p><strong>${message.sender}:</strong> ${message.content}</p>`;
+      });
+
       function sendMessage() {
         const room = document.getElementById("room").value;
         const message = document.getElementById("message").value;

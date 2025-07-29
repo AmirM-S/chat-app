@@ -3,12 +3,14 @@ import { ChatMessage } from './chat.schema';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { EventPattern } from '@nestjs/microservices';
+import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
 
 @Controller()
 @Injectable()
 export class ChatService {
   private readonly logger = new Logger(ChatService.name);
 
+  private readonly rabbitMQService: RabbitMQService;
   constructor(
     @InjectModel(ChatMessage.name) private chatModel: Model<ChatMessage>,
   ) {}
@@ -30,6 +32,8 @@ export class ChatService {
 
       await newMessage.save();
       this.logger.log(`Message saved to MongoDB: ${newMessage._id}`);
+
+      await this.rabbitMQService.publishToQueue('chat-broadcast', newMessage);
       
       return { success: true, messageId: newMessage._id };
     } catch (error) {

@@ -1,16 +1,20 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as amqp from 'amqplib';
+import { ChatGateway } from 'src/chat/chat.gateway';
 
 @Injectable()
 export class RabbitMQService implements OnModuleInit {
   private readonly logger = new Logger(RabbitMQService.name);
   private connection: amqp.Connection;
   private channel: amqp.Channel;
+  private chatGateway: ChatGateway;
 
   async onModuleInit() {
     // Wait a bit for RabbitMQ to be fully ready
     await new Promise(resolve => setTimeout(resolve, 5000));
     await this.connectWithRetry();
+    console.log('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!connectedddd33333')
+    await this.consumeBroadcastMessages();  
   }
 
   private async connectWithRetry(retries = 10, delay = 2000) {
@@ -52,5 +56,20 @@ export class RabbitMQService implements OnModuleInit {
         type: 'chat-messages'
       }
     );
+  }
+  async consumeBroadcastMessages() {
+    await this.channel.assertQueue('chat-broadcast', { durable: false });
+  
+    this.channel.consume('chat-broadcast', (msg) => {
+      if (msg !== null) {
+        const message = JSON.parse(msg.content.toString());
+        console.log('[Broadcast Consumer] Received:', message);
+  
+        // Emit to all WebSocket clients
+        this.chatGateway.server.emit('new_message', message);
+  
+        this.channel.ack(msg);
+      }
+    });
   }
 }
