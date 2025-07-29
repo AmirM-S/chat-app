@@ -8,6 +8,7 @@
     "start": "npm run start --workspace=api-gateway",
     "start:dev1": "npm run start:dev --workspace=api-gateway",
     "start:dev2": "npm run start:dev --workspace=chat-service",
+    "start:dev3": "npm run start:dev --workspace=auth-service",
     "build": "npm run build --workspace=api-gateway"
   },
   "private": true,
