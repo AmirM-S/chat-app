@@ -53,18 +53,18 @@ export class User {
 
   @Column({ nullable: true })
   @Exclude()
-  refreshToken?: string;
+  refreshToken?: string | null;
 
   @Column({ nullable: true })
   @Exclude()
-  emailVerificationToken?: string;
+  emailVerificationToken?: string | null;
 
   @Column({ nullable: true })
   @Exclude()
-  passwordResetToken?: string;
+  passwordResetToken?: string | null;
 
   @Column({ nullable: true })
-  passwordResetExpires?: Date;
+  passwordResetExpires?: Date | null;
 
   @Column({ default: false })
   isEmailVerified: boolean;
