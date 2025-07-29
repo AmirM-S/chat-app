@@ -18,7 +18,7 @@ import {
   OnGatewayDisconnect,
   MessageBody,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Server, Socket } from 'socket.io';
@@ -34,6 +34,7 @@ export class ChatGateway
   private logger = new Logger('ChatGateway');
 
   constructor(
+    @Inject(forwardRef(() => RabbitMQService))
     private readonly rabbitMQService: RabbitMQService,
     @InjectModel(Message.name) private messageModel: Model<Message>,
     private jwtService: JwtService,
