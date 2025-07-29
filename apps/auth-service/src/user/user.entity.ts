@@ -51,25 +51,25 @@ export class User {
   })
   status: UserStatus;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   @Exclude()
-  refreshToken?: string | null;
+  refreshToken?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   @Exclude()
-  emailVerificationToken?: string | null;
+  emailVerificationToken?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'text', nullable: true })
   @Exclude()
-  passwordResetToken?: string | null;
+  passwordResetToken?: string;
 
-  @Column({ nullable: true })
-  passwordResetExpires?: Date | null;
+  @Column({ type: 'timestamp', nullable: true })
+  passwordResetExpires?: Date;
 
   @Column({ default: false })
   isEmailVerified: boolean;
 
-  @Column({ nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   lastLoginAt?: Date;
 
   @CreateDateColumn()

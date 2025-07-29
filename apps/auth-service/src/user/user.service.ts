@@ -81,7 +81,7 @@ export class UserService {
   async updateRefreshToken(userId: string, refreshToken: string | null): Promise<void> {
     const hashedRefreshToken = refreshToken ? await bcrypt.hash(refreshToken, 10) : null;
     await this.userRepository.update(userId, {
-      refreshToken: hashedRefreshToken as string | undefined,
+      refreshToken: hashedRefreshToken,
     });
   }
 
@@ -96,7 +96,7 @@ export class UserService {
 
     user.isEmailVerified = true;
     user.status = UserStatus.ACTIVE;
-    user.emailVerificationToken = undefined;
+    user.emailVerificationToken = null;
 
     return await this.userRepository.save(user);
   }
@@ -132,8 +132,8 @@ export class UserService {
     const hashedPassword = await bcrypt.hash(newPassword, 12);
 
     user.password = hashedPassword;
-    user.passwordResetToken = undefined;
-    user.passwordResetExpires = undefined;
+    user.passwordResetToken = null;
+    user.passwordResetExpires = null;
 
     return await this.userRepository.save(user);
   }
