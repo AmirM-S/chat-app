@@ -1,0 +1,110 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Chat Login</title>
+    <style>
+      .container {
+        max-width: 400px;
+        margin: 50px auto;
+        padding: 20px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+      }
+      .form-group {
+        margin-bottom: 15px;
+      }
+      .error {
+        color: red;
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h2>Login</h2>
+      <div class="form-group">
+        <input
+          type="text"
+          id="emailOrUsername"
+          placeholder="Email or Username"
+        />
+      </div>
+      <div class="form-group">
+        <input type="password" id="password" placeholder="Password" />
+      </div>
+      <div class="error" id="errorMessage"></div>
+      <button onclick="login()">Login</button>
+    </div>
+
+    <script>
+      async function login() {
+        const emailOrUsername =
+          document.getElementById("emailOrUsername").value;
+        const password = document.getElementById("password").value;
+
+        try {
+          const response = await fetch(
+            "http://localhost:3001/api/v1/auth/login",
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ emailOrUsername, password }),
+            }
+          );
+
+          const data = await response.json();
+
+          if (response.ok) {
+            // Store tokens securely
+            localStorage.setItem("accessToken", data.accessToken);
+            // Store refresh token in HTTP-only cookie (handled by server)
+
+            // Redirect to chat
+            window.location.href = "/test-client.html";
+          } else {
+            document.getElementById("errorMessage").style.display = "block";
+            document.getElementById("errorMessage").textContent = data.message;
+          }
+        } catch (error) {
+          console.error("Login error:", error);
+        }
+      }
+
+      async function refreshToken() {
+        try {
+          const response = await fetch(
+            "http://localhost:3001/api/v1/auth/refresh",
+            {
+              method: "POST",
+              credentials: "include", // Important for cookies
+            }
+          );
+
+          if (response.ok) {
+            const data = await response.json();
+            localStorage.setItem("accessToken", data.accessToken);
+            return true;
+          }
+          return false;
+        } catch (error) {
+          console.error("Token refresh failed:", error);
+          return false;
+        }
+      }
+
+      // Auto refresh token before expiration
+      setInterval(
+        async () => {
+          const success = await refreshToken();
+          if (!success) {
+            // Redirect to login if refresh fails
+            window.location.href = "/login.html";
+          }
+        },
+        14 * 60 * 1000
+      );
+    </script>
+  </body>
+</html>

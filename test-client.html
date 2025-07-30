@@ -8,12 +8,7 @@
     <h1>Chat Test Client</h1>
 
     <div>
-      <input
-        type="text"
-        id="room"
-        placeholder="Room Name"
-        value="default"
-      />
+      <input type="text" id="room" placeholder="Room Name" value="default" />
       <input type="text" id="message" placeholder="Message" />
       <button onclick="sendMessage()">Send Message</button>
     </div>
@@ -23,8 +18,7 @@
     <script>
       const socket = io("http://localhost:3000", {
         auth: {
-          token:
-            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Im1hc29uIiwic3ViIjoidXNlci1pZC0xMjMiLCJpYXQiOjE3NTM3MjYyNDksImV4cCI6MTc1MzgxMjY0OX0.l_M0Be1QLfh9GuNLAhWXy2zQ-dXe7-vd2dvY3HNffL4",
+          token: localStorage.getItem("accessToken"),
         },
       });
 
@@ -52,6 +46,15 @@
           `<p><strong>${message.sender}:</strong> ${message.content}</p>`;
       });
 
+      socket.on("connect_error", async (error) => {
+        if (error.message === "Unauthorized") {
+          const success = await refreshToken();
+          if (!success) {
+            window.location.href = "/login.html";
+          }
+        }
+      });
+
       function sendMessage() {
         const room = document.getElementById("room").value;
         const message = document.getElementById("message").value;
@@ -63,7 +66,7 @@
 
         const payload = {
           message: message,
-          room: room
+          room: room,
         };
 
         console.log("Sending payload:", payload);
