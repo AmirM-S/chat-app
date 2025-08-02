@@ -1,0 +1,52 @@
+# Node modules
+node_modules/
+
+# Output build directories
+dist/
+build/
+
+# Env files
+.env
+.env.*        # support for multiple envs like .env.dev
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS/system files
+.DS_Store
+Thumbs.db
+
+# IDE/editor config
+.vscode/
+.idea/
+
+# TypeScript
+*.tsbuildinfo
+
+# Docker
+docker-compose.override.yml
+
+# Coverage reports (Jest)
+coverage/
+
+# Mongo/Postgres dumps (if exported manually)
+*.dump
+*.sql
+
+# Optional: skip local database volumes (adjust if needed)
+volumes/
+
+# Ignore Swagger auto-generated files if any
+swagger-static/
+
+# pm2 logs/pids
+pids/
+*.pid
+*.seed
+
+# Misc
+*.tgz
