@@ -1,27 +1,52 @@
 import { Module } from '@nestjs/common';
-import { JwtModule } from '@nestjs/jwt';
-import { MongooseModule } from '@nestjs/mongoose';
+import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
-// import { AuthController } from './auth/auth.controller';
-// import { JwtStrategy } from './auth/jwt.strategy';
-import { ChatGateway } from './chat/chat.gateway';
-import { Message, MessageSchema } from './chat/message.schema';
-import { AppService } from './app.service';
+// Controllers
 import { AppController } from './app.controller';
-import { RabbitMQService } from './rabbitmq/rabbitmq.service';
+import { AuthController } from './auth/auth.controller';
+import { ChatController } from './chat/chat.controller';
+import { UserController } from './user/user.controller';
+
+// Services  
+import { AppService } from './app.service';
+import { ProxyService } from './proxy/proxy.service';
+
+// Guards & Interceptors
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
+import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+
 @Module({
   imports: [
-    JwtModule.register({
-      secret: 'secret123',
-      signOptions: { expiresIn: '1  day' },
+    ConfigModule.forRoot({
+      isGlobal: true,
     }),
-    MongooseModule.forRoot('mongodb://127.0.0.1:27017/chat-app'),
-    MongooseModule.forFeature([{ name: Message.name, schema: MessageSchema }]),
+    // Rate limiting
+    ThrottlerModule.forRoot([{
+      ttl: 60000, // 1 minute
+      limit: 100, // 100 requests per minute
+    }]),
   ],
-  controllers: [AppController, AuthController],
-  providers: [AppService, ChatGateway, JwtStrategy, RabbitMQService],
-  exports: [RabbitMQService],
+  controllers: [
+    AppController,
+    AuthController,
+    ChatController,
+    UserController,
+  ],
+  providers: [
+    AppService,
+    ProxyService,
+    // Global rate limiting
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+    // Global logging
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
+  ],
 })
 export class AppModule {}
-
-
