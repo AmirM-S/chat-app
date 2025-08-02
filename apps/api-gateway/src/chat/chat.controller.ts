@@ -373,10 +373,10 @@ export class ChatController {
   @ApiQuery({ name: 'limit', required: false, description: 'Max results (default: 20)' })
   @ApiResponse({ status: 200, description: 'Search results retrieved' })
   async searchMessages(
+    @Headers('authorization') auth: string,
     @Query('q') query: string,
     @Query('roomId') roomId?: string,
-    @Query('limit') limit: number = 20,
-    @Headers('authorization') auth: string
+    @Query('limit') limit: number = 20
   ) {
     const searchParams = new URLSearchParams({ q: query, limit: limit.toString() });
     if (roomId) searchParams.append('roomId', roomId);
@@ -396,8 +396,8 @@ export class ChatController {
   @ApiQuery({ name: 'roomId', required: false, description: 'Get count for specific room' })
   @ApiResponse({ status: 200, description: 'Unread count retrieved' })
   async getUnreadCount(
-    @Query('roomId') roomId?: string,
-    @Headers('authorization') auth: string
+    @Headers('authorization') auth: string,
+    @Query('roomId') roomId?: string
   ) {
     const searchParams = roomId ? `?roomId=${roomId}` : '';
     const response = await this.proxyService.forwardRequestWithCircuitBreaker(
