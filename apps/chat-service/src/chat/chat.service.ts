@@ -391,4 +391,392 @@ export class ChatService {
       excludeUsers,
     });
   }
+
+  async updateChat(chatId: string, updateChatDto: UpdateChatDto, userId: string): Promise<ChatDocument> {
+    try {
+      const chat = await this.getChatById(chatId, userId);
+      
+      // Check if user has permission to update chat
+      if (!this.hasAdminPermission(chat, userId)) {
+        throw new ForbiddenException('Insufficient permissions to update chat');
+      }
+  
+      const updatedChat = await this.chatModel.findByIdAndUpdate(
+        chatId,
+        {
+          ...updateChatDto,
+          lastActivity: new Date(),
+        },
+        { new: true, runValidators: true }
+      ).lean().exec();
+  
+      // Invalidate cache
+      await this.cacheService.delete(`chat:${chatId}`);
+      await this.invalidateUserChatCache(chat.participants);
+  
+      // Emit event
+      this.eventsService.emitChatUpdated(updatedChat as ChatDocument);
+  
+      this.logger.log(`Chat updated: ${chatId} by user: ${userId}`);
+      return updatedChat as ChatDocument;
+    } catch (error) {
+      this.logger.error(`Failed to update chat: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async deleteChat(chatId: string, userId: string): Promise<void> {
+    try {
+      const chat = await this.getChatById(chatId, userId);
+      
+      // Only owner can delete chat
+      if (chat.createdBy.toString() !== userId) {
+        throw new ForbiddenException('Only chat owner can delete the chat');
+      }
+  
+      await this.chatModel.findByIdAndUpdate(chatId, {
+        status: ChatStatus.DELETED,
+        lastActivity: new Date(),
+      });
+  
+      // Invalidate cache
+      await this.cacheService.delete(`chat:${chatId}`);
+      await this.invalidateUserChatCache(chat.participants);
+  
+      this.logger.log(`Chat deleted: ${chatId} by user: ${userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete chat: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async addParticipants(chatId: string, userIds: string[], userId: string): Promise<ChatDocument> {
+    try {
+      const chat = await this.getChatById(chatId, userId);
+      
+      if (!this.hasAdminPermission(chat, userId)) {
+        throw new ForbiddenException('Insufficient permissions to add participants');
+      }
+  
+      const validUserIds = await this.validateParticipants(userIds);
+      const newParticipants = validUserIds.filter(id => !chat.participants.includes(id));
+  
+      if (newParticipants.length === 0) {
+        throw new BadRequestException('No new participants to add');
+      }
+  
+      const updatedChat = await this.chatModel.findByIdAndUpdate(
+        chatId,
+        {
+          $addToSet: { participants: { $each: newParticipants } },
+          lastActivity: new Date(),
+        },
+        { new: true }
+      ).lean().exec();
+  
+      // Initialize participant settings for new members
+      const participantUpdates = {};
+      newParticipants.forEach(participantId => {
+        participantUpdates[`participantSettings.${participantId}`] = {
+          role: 'member',
+          joinedAt: new Date(),
+          lastRead: new Date(),
+          unreadCount: 0,
+        };
+      });
+  
+      await this.chatModel.updateOne({ _id: chatId }, { $set: participantUpdates });
+  
+      // Invalidate cache
+      await this.cacheService.delete(`chat:${chatId}`);
+      await this.invalidateUserChatCache([...chat.participants, ...newParticipants]);
+  
+      // Emit events
+      newParticipants.forEach(participantId => {
+        this.eventsService.emitUserJoinedChat(chatId, participantId);
+      });
+  
+      this.logger.log(`Participants added to chat ${chatId}: ${newParticipants.join(', ')}`);
+      return updatedChat as ChatDocument;
+    } catch (error) {
+      this.logger.error(`Failed to add participants: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async removeParticipant(chatId: string, participantId: string, userId: string): Promise<ChatDocument> {
+    try {
+      const chat = await this.getChatById(chatId, userId);
+      
+      // Users can remove themselves, or admins can remove others
+      if (participantId !== userId && !this.hasAdminPermission(chat, userId)) {
+        throw new ForbiddenException('Insufficient permissions to remove participant');
+      }
+  
+      // Cannot remove chat owner
+      if (participantId === chat.createdBy.toString()) {
+        throw new ForbiddenException('Cannot remove chat owner');
+      }
+  
+      const updatedChat = await this.chatModel.findByIdAndUpdate(
+        chatId,
+        {
+          $pull: { 
+            participants: participantId,
+            admins: participantId 
+          },
+          $unset: { [`participantSettings.${participantId}`]: 1 },
+          lastActivity: new Date(),
+        },
+        { new: true }
+      ).lean().exec();
+  
+      // Invalidate cache
+      await this.cacheService.delete(`chat:${chatId}`);
+      await this.invalidateUserChatCache([...chat.participants]);
+  
+      // Emit event
+      this.eventsService.emitUserLeftChat(chatId, participantId);
+  
+      this.logger.log(`Participant ${participantId} removed from chat ${chatId}`);
+      return updatedChat as ChatDocument;
+    } catch (error) {
+      this.logger.error(`Failed to remove participant: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async updateMessage(messageId: string, updateMessageDto: UpdateMessageDto, userId: string): Promise<MessageDocument> {
+    try {
+      const message = await this.messageModel.findById(messageId).lean().exec();
+      
+      if (!message) {
+        throw new NotFoundException('Message not found');
+      }
+  
+      if (message.senderId.toString() !== userId) {
+        throw new ForbiddenException('Can only edit your own messages');
+      }
+  
+      const updatedMessage = await this.messageModel.findByIdAndUpdate(
+        messageId,
+        {
+          ...updateMessageDto,
+          'metadata.edited': true,
+          'metadata.editedAt': new Date(),
+          'metadata.originalContent': message.content,
+        },
+        { new: true, runValidators: true }
+      ).lean().exec();
+  
+      // Invalidate cache
+      await this.cacheService.delete(`messages:${message.chatId}:*`);
+  
+      // Emit event
+      this.eventsService.emitMessageUpdated(updatedMessage as MessageDocument);
+  
+      this.logger.log(`Message updated: ${messageId} by user: ${userId}`);
+      return updatedMessage as MessageDocument;
+    } catch (error) {
+      this.logger.error(`Failed to update message: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async deleteMessage(messageId: string, userId: string): Promise<void> {
+    try {
+      const message = await this.messageModel.findById(messageId).lean().exec();
+      
+      if (!message) {
+        throw new NotFoundException('Message not found');
+      }
+  
+      // Users can delete their own messages, or admins can delete any message
+      const chat = await this.getChatById(message.chatId.toString(), userId);
+      const canDelete = message.senderId.toString() === userId || this.hasAdminPermission(chat, userId);
+      
+      if (!canDelete) {
+        throw new ForbiddenException('Insufficient permissions to delete message');
+      }
+  
+      await this.messageModel.findByIdAndUpdate(messageId, {
+        status: MessageStatus.DELETED,
+        deletedAt: new Date(),
+        deletedBy: userId,
+      });
+  
+      // Invalidate cache
+      await this.cacheService.delete(`messages:${message.chatId}:*`);
+  
+      this.logger.log(`Message deleted: ${messageId} by user: ${userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to delete message: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async markMessageAsRead(messageId: string, userId: string): Promise<void> {
+    try {
+      const message = await this.messageModel.findById(messageId).lean().exec();
+      
+      if (!message) {
+        throw new NotFoundException('Message not found');
+      }
+  
+      // Verify user has access to the chat
+      await this.getChatById(message.chatId.toString(), userId);
+  
+      await this.messageModel.findByIdAndUpdate(messageId, {
+        $addToSet: { readBy: userId },
+        $set: { [`readReceipts.${userId}`]: new Date() },
+      });
+  
+      // Emit read receipt event
+      this.eventsService.emitMessagesRead(message.chatId.toString(), userId, [messageId]);
+  
+      this.logger.log(`Message ${messageId} marked as read by ${userId}`);
+    } catch (error) {
+      this.logger.error(`Failed to mark message as read: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async addReaction(messageId: string, emoji: string, userId: string): Promise<MessageDocument> {
+    try {
+      const message = await this.messageModel.findById(messageId).lean().exec();
+      
+      if (!message) {
+        throw new NotFoundException('Message not found');
+      }
+  
+      // Verify user has access to the chat
+      await this.getChatById(message.chatId.toString(), userId);
+  
+      const updatedMessage = await this.messageModel.findByIdAndUpdate(
+        messageId,
+        {
+          $addToSet: { [`metadata.reactions.${emoji}`]: userId },
+        },
+        { new: true }
+      ).lean().exec();
+  
+      // Invalidate cache
+      await this.cacheService.delete(`messages:${message.chatId}:*`);
+  
+      this.logger.log(`Reaction ${emoji} added to message ${messageId} by ${userId}`);
+      return updatedMessage as MessageDocument;
+    } catch (error) {
+      this.logger.error(`Failed to add reaction: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async removeReaction(messageId: string, emoji: string, userId: string): Promise<MessageDocument> {
+    try {
+      const message = await this.messageModel.findById(messageId).lean().exec();
+      
+      if (!message) {
+        throw new NotFoundException('Message not found');
+      }
+  
+      // Verify user has access to the chat
+      await this.getChatById(message.chatId.toString(), userId);
+  
+      const updatedMessage = await this.messageModel.findByIdAndUpdate(
+        messageId,
+        {
+          $pull: { [`metadata.reactions.${emoji}`]: userId },
+        },
+        { new: true }
+      ).lean().exec();
+  
+      // Clean up empty reaction arrays
+      if (updatedMessage?.metadata?.reactions?.[emoji]?.length === 0) {
+        await this.messageModel.findByIdAndUpdate(messageId, {
+          $unset: { [`metadata.reactions.${emoji}`]: 1 },
+        });
+      }
+  
+      // Invalidate cache
+      await this.cacheService.delete(`messages:${message.chatId}:*`);
+  
+      this.logger.log(`Reaction ${emoji} removed from message ${messageId} by ${userId}`);
+      return updatedMessage as MessageDocument;
+    } catch (error) {
+      this.logger.error(`Failed to remove reaction: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  async getChatStatistics(chatId: string, userId: string): Promise<any> {
+    try {
+      await this.getChatById(chatId, userId);
+  
+      const stats = await this.messageModel.aggregate([
+        { $match: { chatId: new Types.ObjectId(chatId), status: { $ne: MessageStatus.DELETED } } },
+        {
+          $group: {
+            _id: null,
+            totalMessages: { $sum: 1 },
+            messagesByType: {
+              $push: {
+                type: '$type',
+                senderId: '$senderId',
+                createdAt: '$createdAt',
+              }
+            },
+            messagesByUser: {
+              $addToSet: '$senderId'
+            },
+            firstMessage: { $min: '$createdAt' },
+            lastMessage: { $max: '$createdAt' },
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            totalMessages: 1,
+            uniqueUsers: { $size: '$messagesByUser' },
+            firstMessage: 1,
+            lastMessage: 1,
+            messageTypes: {
+              $arrayToObject: {
+                $map: {
+                  input: { $setUnion: '$messagesByType.type' },
+                  as: 'type',
+                  in: {
+                    k: '$type',
+                    v: {
+                      $size: {
+                        $filter: {
+                          input: '$messagesByType',
+                          cond: { $eq: ['$this.type', '$type'] }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]).exec();
+  
+      return stats[0] || {
+        totalMessages: 0,
+        uniqueUsers: 0,
+        messageTypes: {},
+        firstMessage: null,
+        lastMessage: null,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get chat statistics: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+  
+  private hasAdminPermission(chat: ChatDocument, userId: string): boolean {
+    return chat.createdBy.toString() === userId || 
+           chat.admins.some(admin => admin.toString() === userId);
+  }
 }
