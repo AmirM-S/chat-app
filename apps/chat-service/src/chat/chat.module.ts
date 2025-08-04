@@ -7,7 +7,7 @@ import { ChatController } from './chat.controller';
 import { Chat, ChatSchema } from './schemas/chat.schema';
 import { Message, MessageSchema } from './schemas/message.schema';
 import { Participant, ParticipantSchema } from './schemas/participant.schema';
-import { EventsModule } from '../events/events.module';
+import { EventsModule } from '../events/event.module';
 import { CacheModule } from '../cache/cache.module';
 
 @Module({

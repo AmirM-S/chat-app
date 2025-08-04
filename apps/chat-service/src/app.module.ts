@@ -3,10 +3,10 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { HealthModule } from '@nestjs/terminus';
+import { TerminusModule } from '@nestjs/terminus';
 import { PrometheusModule } from '@willsoto/nestjs-prometheus';
 import { ChatModule } from './chat/chat.module';
-import { EventsModule } from './events/events.module';
+import { EventsModule } from './events/event.module';
 import { CacheModule } from './cache/cache.module';
 import { HealthController } from './health/health.controller';
 import { AppController } from './app.controller';
@@ -56,7 +56,7 @@ import { AppService } from './app.service';
     ]),
 
     // Health checks
-    HealthModule,
+    TerminusModule,
 
     // Monitoring
     PrometheusModule.register(),
