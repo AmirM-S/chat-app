@@ -23,13 +23,11 @@ import { AppService } from './app.service';
     // Database
     MongooseModule.forRootAsync({
       useFactory: (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGODB_URI') || 'mongodb://127.0.0.1:27017/chat-service',
-        useNewUrlParser: true,
-        useUnifiedTopology: true,
+        // uri: configService.get<string>('MONGODB_URI') || 'mongodb://127.0.0.1:27017/chat-service',
+        uri: 'mongodb://127.0.0.1:27017/chat-service',
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
-        bufferMaxEntries: 0,
         bufferCommands: false,
       }),
       inject: [ConfigService],

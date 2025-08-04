@@ -46,7 +46,7 @@ export class Message {
       filename: String,
       mimetype: String,
       size: Number,
-      thumbnail?: String,
+      thumbnail: String,
     },
   })
   attachment?: {

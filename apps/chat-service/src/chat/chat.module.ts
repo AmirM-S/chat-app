@@ -21,9 +21,9 @@ import { CacheModule } from '../cache/cache.module';
       type: 'single',
       url: process.env.REDIS_URL || 'redis://localhost:6379',
       options: {
-        retryDelayOnFailover: 100,
         maxRetriesPerRequest: 3,
         lazyConnect: true,
+        enableReadyCheck: true,
       },
     }),
     ClientsModule.register([
