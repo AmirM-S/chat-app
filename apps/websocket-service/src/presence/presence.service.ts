@@ -1,92 +1,209 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service';
+
+export enum PresenceStatus {
+  ONLINE = 'online',
+  AWAY = 'away',
+  BUSY = 'busy',
+  OFFLINE = 'offline',
+}
+
+export interface UserPresence {
+  userId: string;
+  status: PresenceStatus;
+  lastSeen: Date;
+  socketIds: string[];
+  activeChat?: string;
+}
 
 @Injectable()
 export class PresenceService {
+  private readonly logger = new Logger(PresenceService.name);
+  private readonly PRESENCE_TTL = 300; // 5 minutes
+
   constructor(private readonly redisService: RedisService) {}
 
-  async userConnected(userId: string, socketId: string): Promise<void> {
-    const redis = this.redisService.getClient();
-    
-    // Add socket to user's socket list
-    await redis.sadd(`user:${userId}:sockets`, socketId);
-    
-    // Set user as online
-    await redis.setex(`user:${userId}:status`, 3600, 'online');
-    
-    // Update last seen
-    await redis.setex(`user:${userId}:last_seen`, 86400, new Date().toISOString());
-  }
-
-  async userDisconnected(userId: string, socketId: string): Promise<void> {
-    const redis = this.redisService.getClient();
-    
-    // Remove socket from user's socket list
-    await redis.srem(`user:${userId}:sockets`, socketId);
-    
-    // Check if user has other active sockets
-    const activeSockets = await redis.scard(`user:${userId}:sockets`);
-    
-    if (activeSockets === 0) {
-      // No active sockets, mark as offline
-      await redis.setex(`user:${userId}:status`, 3600, 'offline');
-      await redis.setex(`user:${userId}:last_seen`, 86400, new Date().toISOString());
-    }
-  }
-
-  async getUserSockets(userId: string): Promise<string[]> {
-    const redis = this.redisService.getClient();
-    return redis.smembers(`user:${userId}:sockets`);
-  }
-
-  async addUserToRoom(userId: string, roomId: string): Promise<void> {
-    const redis = this.redisService.getClient();
-    
-    // Add user to room
-    await redis.sadd(`room:${roomId}:users`, userId);
-    
-    // Add room to user's rooms
-    await redis.sadd(`user:${userId}:rooms`, roomId);
-  }
-
-  async removeUserFromRoom(userId: string, roomId: string): Promise<void> {
-    const redis = this.redisService.getClient();
-    
-    // Remove user from room
-    await redis.srem(`room:${roomId}:users`, userId);
-    
-    // Remove room from user's rooms
-    await redis.srem(`user:${userId}:rooms`, roomId);
-  }
-
-  async getUserRooms(userId: string): Promise<string[]> {
-    const redis = this.redisService.getClient();
-    return redis.smembers(`user:${userId}:rooms`);
-  }
-
-  async getRoomOnlineUsers(roomId: string): Promise<Array<{ userId: string; status: string; lastSeen: string }>> {
-    const redis = this.redisService.getClient();
-    
-    const userIds = await redis.smembers(`room:${roomId}:users`);
-    const onlineUsers = [];
-
-    for (const userId of userIds) {
-      const status = await redis.get(`user:${userId}:status`) || 'offline';
-      const lastSeen = await redis.get(`user:${userId}:last_seen`) || new Date().toISOString();
-      
-      onlineUsers.push({
+  async setUserOnline(userId: string, socketId: string): Promise<void> {
+    try {
+      const presence: UserPresence = {
         userId,
-        status,
-        lastSeen,
-      });
-    }
+        status: PresenceStatus.ONLINE,
+        lastSeen: new Date(),
+        socketIds: [socketId],
+      };
 
-    return onlineUsers;
+      // Get existing presence to merge socket IDs
+      const existingPresence = await this.getUserPresence(userId);
+      if (existingPresence) {
+        presence.socketIds = [...new Set([...existingPresence.socketIds, socketId])];
+        presence.activeChat = existingPresence.activeChat;
+      }
+
+      await this.redisService.hset('user_presence', userId, presence);
+      await this.redisService.sadd('online_users', userId);
+
+      // Broadcast presence update
+      await this.broadcastPresenceUpdate(userId, presence);
+
+      this.logger.debug(`User ${userId} set to online`);
+    } catch (error) {
+      this.logger.error(`Failed to set user ${userId} online:`, error);
+    }
   }
 
-  async getUserContacts(userId: string): Promise<Array<{ userId: string; status: string; lastSeen: string }>> {
-    // This would typically query a database for user's contacts/friends
-    // For now, return empty array - implement based on your user relationship logic
-    return [];
+  async setUserOffline(userId: string, socketId: string): Promise<void> {
+    try {
+      const presence = await this.getUserPresence(userId);
+      if (!presence) {
+        return;
+      }
+
+      // Remove socket ID
+      presence.socketIds = presence.socketIds.filter(id => id !== socketId);
+      presence.lastSeen = new Date();
+
+      if (presence.socketIds.length === 0) {
+        // User is completely offline
+        presence.status = PresenceStatus.OFFLINE;
+        await this.redisService.srem('online_users', userId);
+      }
+
+      await this.redisService.hset('user_presence', userId, presence);
+
+      // Broadcast presence update
+      await this.broadcastPresenceUpdate(userId, presence);
+
+      this.logger.debug(`User ${userId} socket ${socketId} set to offline`);
+    } catch (error) {
+      this.logger.error(`Failed to set user ${userId} offline:`, error);
+    }
+  }
+
+  async updateUserStatus(userId: string, status: PresenceStatus): Promise<void> {
+    try {
+      const presence = await this.getUserPresence(userId);
+      if (!presence) {
+        return;
+      }
+
+      presence.status = status;
+      presence.lastSeen = new Date();
+
+      await this.redisService.hset('user_presence', userId, presence);
+
+      // Broadcast presence update
+      await this.broadcastPresenceUpdate(userId, presence);
+
+      this.logger.debug(`User ${userId} status updated to ${status}`);
+    } catch (error) {
+      this.logger.error(`Failed to update user ${userId} status:`, error);
+    }
+  }
+
+  async setActiveChat(userId: string, chatId: string): Promise<void> {
+    try {
+      const presence = await this.getUserPresence(userId);
+      if (!presence) {
+        return;
+      }
+
+      presence.activeChat = chatId;
+      presence.lastSeen = new Date();
+
+      await this.redisService.hset('user_presence', userId, presence);
+
+      this.logger.debug(`User ${userId} active chat set to ${chatId}`);
+    } catch (error) {
+      this.logger.error(`Failed to set active chat for user ${userId}:`, error);
+    }
+  }
+
+  async clearActiveChat(userId: string): Promise<void> {
+    try {
+      const presence = await this.getUserPresence(userId);
+      if (!presence) {
+        return;
+      }
+
+      delete presence.activeChat;
+      presence.lastSeen = new Date();
+
+      await this.redisService.hset('user_presence', userId, presence);
+
+      this.logger.debug(`User ${userId} active chat cleared`);
+    } catch (error) {
+      this.logger.error(`Failed to clear active chat for user ${userId}:`, error);
+    }
+  }
+
+  async updateLastSeen(userId: string): Promise<void> {
+    try {
+      const presence = await this.getUserPresence(userId);
+      if (!presence) {
+        return;
+      }
+
+      presence.lastSeen = new Date();
+      await this.redisService.hset('user_presence', userId, presence);
+    } catch (error) {
+      this.logger.error(`Failed to update last seen for user ${userId}:`, error);
+    }
+  }
+
+  async getUserPresence(userId: string): Promise<UserPresence | null> {
+    try {
+      return await this.redisService.hget<UserPresence>('user_presence', userId);
+    } catch (error) {
+      this.logger.error(`Failed to get presence for user ${userId}:`, error);
+      return null;
+    }
+  }
+
+  async getMultipleUserPresence(userIds: string[]): Promise<Record<string, UserPresence>> {
+    try {
+      const presences: Record<string, UserPresence> = {};
+      
+      for (const userId of userIds) {
+        const presence = await this.getUserPresence(userId);
+        if (presence) {
+          presences[userId] = presence;
+        }
+      }
+
+      return presences;
+    } catch (error) {
+      this.logger.error('Failed to get multiple user presence:', error);
+      return {};
+    }
+  }
+
+  async getOnlineUsers(): Promise<string[]> {
+    try {
+      return await this.redisService.smembers('online_users');
+    } catch (error) {
+      this.logger.error('Failed to get online users:', error);
+      return [];
+    }
+  }
+
+  async isUserOnline(userId: string): Promise<boolean> {
+    try {
+      return await this.redisService.sismember('online_users', userId);
+    } catch (error) {
+      this.logger.error(`Failed to check if user ${userId} is online:`, error);
+      return false;
+    }
+  }
+
+  private async broadcastPresenceUpdate(userId: string, presence: UserPresence): Promise<void> {
+    try {
+      await this.redisService.publish('presence_updates', {
+        type: 'presence_update',
+        userId,
+        presence,
+      });
+    } catch (error) {
+      this.logger.error(`Failed to broadcast presence update for user ${userId}:`, error);
+    }
   }
 }
