@@ -157,6 +157,32 @@ export class RedisService {
     }
   }
 
+  async incr(key: string): Promise<number> {
+    try {
+      return await this.redis.incr(key);
+    } catch (error) {
+      this.logger.error(`Failed to increment key ${key}:`, error);
+      return 0;
+    }
+  }
+
+  async expire(key: string, seconds: number): Promise<void> {
+    try {
+      await this.redis.expire(key, seconds);
+    } catch (error) {
+      this.logger.error(`Failed to set expiry for key ${key}:`, error);
+    }
+  }
+
+  async ping(): Promise<string> {
+    try {
+      return await this.redis.ping();
+    } catch (error) {
+      this.logger.error('Failed to ping Redis:', error);
+      throw error;
+    }
+  }
+
   getClient(): Redis {
     return this.redis;
   }

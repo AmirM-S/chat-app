@@ -56,7 +56,7 @@ export class ConnectionManager {
       await this.presenceService.setUserOnline(user.sub, client.id);
 
       // Update metrics
-      this.metricsService.incrementConnections();
+      this.metricsService.incrementConnection();
 
       // Join user to their personal room
       await client.join(`user:${user.sub}`);
@@ -93,7 +93,7 @@ export class ConnectionManager {
       await this.presenceService.setUserOffline(socketData.userId, client.id);
 
       // Update metrics
-      this.metricsService.decrementConnections();
+      this.metricsService.decrementConnection();
 
       this.logger.log(`👋 User disconnected: ${socketData.username} (${client.id})`);
 
@@ -181,5 +181,66 @@ export class ConnectionManager {
       this.logger.error(`Failed to get connections in room ${roomId}:`, error);
       return [];
     }
+  }
+
+  async getConnectionStats() {
+    try {
+      const totalConnections = this.getTotalConnections();
+      const activeUsers = new Set<string>();
+      
+      // Get unique active users
+      for (const connection of this.connections.values()) {
+        activeUsers.add(connection.userId);
+      }
+
+      return {
+        totalConnections,
+        activeUsers: activeUsers.size,
+        totalRooms: await this.getTotalRooms(),
+        peakConnections: await this.getPeakConnections(),
+        averageConnectionsPerMinute: await this.getAverageConnectionsPerMinute(),
+      };
+    } catch (error) {
+      this.logger.error('Error getting connection stats:', error);
+      return {
+        totalConnections: 0,
+        activeUsers: 0,
+        totalRooms: 0,
+        peakConnections: 0,
+        averageConnectionsPerMinute: 0,
+      };
+    }
+  }
+
+  private async getTotalRooms(): Promise<number> {
+    try {
+      const rooms = await this.redisService.smembers('active_rooms');
+      return rooms.length;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  private async getPeakConnections(): Promise<number> {
+    try {
+      return await this.redisService.get<number>('metrics:connections:peak') || 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  private async getAverageConnectionsPerMinute(): Promise<number> {
+    try {
+      const currentMinute = this.getCurrentMinute();
+      const key = `metrics:connections:minute:${currentMinute}`;
+      return await this.redisService.get<number>(key) || 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  private getCurrentMinute(): string {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}`;
   }
 }
