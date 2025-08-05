@@ -2,32 +2,42 @@ import {
   WebSocketGateway,
   WebSocketServer,
   SubscribeMessage,
-  ConnectedSocket,
-  MessageBody,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  UseGuards,
+  MessageBody,
+  ConnectedSocket,
+  UseFilters,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseGuards, Logger } from '@nestjs/common';
+import { Logger, UseInterceptors } from '@nestjs/common';
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
-import { AuthenticatedSocket } from '../auth/interfaces/authenticated-socket.interface';
+import { RateLimitGuard } from '../shared/guards/rate-limit.guard';
+import { WsExceptionFilter } from '../shared/filters/ws-exception.filter';
+import { ConnectionManager } from '../connection/connection.manager';
 import { PresenceService } from '../presence/presence.service';
-import { RabbitMQService } from '../rabbitmq/rabbitmq.service';
+import { MetricsService } from '../metrics/metrics.service';
+import { RedisService } from '../redis/redis.service';
 import {
   SendMessageDto,
-  JoinRoomDto,
-  LeaveRoomDto,
+  JoinChatDto,
+  LeaveChatDto,
   TypingDto,
   MessageReactionDto,
-} from './dto';
+  EditMessageDto,
+  DeleteMessageDto,
+  MarkAsReadDto,
+} from './dto/chat.dto';
 
 @WebSocketGateway({
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGINS?.split(',') || ['http://localhost:3000'],
     credentials: true,
   },
-  namespace: '/chat',
+  transports: ['websocket', 'polling'],
 })
+@UseFilters(new WsExceptionFilter())
+@UseGuards(WsJwtGuard)
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
@@ -35,282 +45,388 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private readonly logger = new Logger(ChatGateway.name);
 
   constructor(
+    private readonly connectionManager: ConnectionManager,
     private readonly presenceService: PresenceService,
-    private readonly rabbitMQService: RabbitMQService,
+    private readonly metricsService: MetricsService,
+    private readonly redisService: RedisService,
   ) {}
 
   async handleConnection(client: Socket) {
-    try {
-      // Authentication happens in WsJwtGuard
-      this.logger.log(`Client connecting: ${client.id}`);
-    } catch (error) {
-      this.logger.error('Connection error:', error);
-      client.disconnect();
-    }
+    await this.connectionManager.handleConnection(client);
   }
 
-  async handleDisconnect(client: AuthenticatedSocket) {
-    try {
-      if (client.user) {
-        await this.presenceService.userDisconnected(client.user.userId, client.id);
-        
-        // Notify rooms about user going offline
-        const userRooms = await this.presenceService.getUserRooms(client.user.userId);
-        userRooms.forEach(roomId => {
-          client.to(roomId).emit('user_status_changed', {
-            userId: client.user.userId,
-            status: 'offline',
-            lastSeen: new Date(),
-          });
-        });
-      }
-      
-      this.logger.log(`Client disconnected: ${client.id}`);
-    } catch (error) {
-      this.logger.error('Disconnect error:', error);
-    }
+  async handleDisconnect(client: Socket) {
+    await this.connectionManager.handleDisconnection(client);
   }
 
-  @UseGuards(WsJwtGuard)
-  @SubscribeMessage('authenticate')
-  async handleAuthentication(@ConnectedSocket() client: AuthenticatedSocket) {
+  @SubscribeMessage('join_chat')
+  @UseGuards(RateLimitGuard)
+  async handleJoinChat(
+    @MessageBody() data: JoinChatDto,
+    @ConnectedSocket() client: Socket,
+  ) {
     try {
-      // Mark user as online
-      await this.presenceService.userConnected(client.user.userId, client.id);
+      const user = client.data.user;
+      const { chatId } = data;
+
+      // Join the chat room
+      await this.connectionManager.joinRoom(client, `chat:${chatId}`);
       
-      // Join user to their rooms
-      const userRooms = await this.presenceService.getUserRooms(client.user.userId);
-      userRooms.forEach(roomId => {
-        client.join(roomId);
-        // Notify room members that user is online
-        client.to(roomId).emit('user_status_changed', {
-          userId: client.user.userId,
-          status: 'online',
-          lastSeen: new Date(),
-        });
+      // Set active chat for presence
+      await this.presenceService.setActiveChat(user.sub, chatId);
+
+      // Notify others in the chat
+      client.to(`chat:${chatId}`).emit('user_joined_chat', {
+        userId: user.sub,
+        username: user.username,
+        chatId,
+        timestamp: new Date(),
       });
 
-      client.emit('authenticated', {
-        success: true,
-        userId: client.user.userId,
-        rooms: userRooms,
+      // Send confirmation to client
+      client.emit('joined_chat', {
+        chatId,
+        message: 'Successfully joined chat',
+        timestamp: new Date(),
       });
 
-      this.logger.log(`User authenticated: ${client.user.userId}`);
+      this.logger.debug(`User ${user.username} joined chat ${chatId}`);
     } catch (error) {
-      this.logger.error('Authentication error:', error);
-      client.emit('error', { message: 'Authentication failed' });
+      this.logger.error('Error joining chat:', error);
+      client.emit('error', { message: 'Failed to join chat' });
     }
   }
 
-  @UseGuards(WsJwtGuard)
+  @SubscribeMessage('leave_chat')
+  @UseGuards(RateLimitGuard)
+  async handleLeaveChat(
+    @MessageBody() data: LeaveChatDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const user = client.data.user;
+      const { chatId } = data;
+
+      // Leave the chat room
+      await this.connectionManager.leaveRoom(client, `chat:${chatId}`);
+      
+      // Clear active chat for presence
+      await this.presenceService.clearActiveChat(user.sub);
+
+      // Notify others in the chat
+      client.to(`chat:${chatId}`).emit('user_left_chat', {
+        userId: user.sub,
+        username: user.username,
+        chatId,
+        timestamp: new Date(),
+      });
+
+      // Send confirmation to client
+      client.emit('left_chat', {
+        chatId,
+        message: 'Successfully left chat',
+        timestamp: new Date(),
+      });
+
+      this.logger.debug(`User ${user.username} left chat ${chatId}`);
+    } catch (error) {
+      this.logger.error('Error leaving chat:', error);
+      client.emit('error', { message: 'Failed to leave chat' });
+    }
+  }
+
   @SubscribeMessage('send_message')
-  async handleMessage(
+  @UseGuards(RateLimitGuard)
+  async handleSendMessage(
     @MessageBody() data: SendMessageDto,
-    @ConnectedSocket() client: AuthenticatedSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
+      const user = client.data.user;
+      await this.connectionManager.updateActivity(client);
+
+      // Broadcast message to chat participants
       const messageData = {
-        ...data,
-        senderId: client.user.userId,
-        senderName: client.user.username,
+        id: data.tempId,
+        chatId: data.chatId,
+        senderId: user.sub,
+        senderName: user.username,
+        content: data.content,
+        type: data.type || 'text',
+        parentId: data.parentId,
+        attachments: data.attachments,
         timestamp: new Date(),
-        messageId: this.generateMessageId(),
+        status: 'sent',
       };
 
-      // Publish to message queue for persistence
-      await this.rabbitMQService.publishMessage('message_queue', {
-        action: 'send_message',
-        data: messageData,
-      });
+      // Send to chat room
+      this.server.to(`chat:${data.chatId}`).emit('new_message', messageData);
 
-      // Real-time broadcasting
-      if (data.roomId) {
-        // Group/Channel message
-        this.server.to(data.roomId).emit('new_message', messageData);
-      } else if (data.recipientId) {
-        // Direct message
-        const recipientSockets = await this.presenceService.getUserSockets(data.recipientId);
-        recipientSockets.forEach(socketId => {
-          this.server.to(socketId).emit('new_message', messageData);
-        });
-        // Also send to sender
-        client.emit('new_message', messageData);
-      }
+      // Update metrics
+      this.metricsService.incrementMessages();
 
-      this.logger.log(`Message sent by ${client.user.userId}`);
+      this.logger.debug(`Message sent in chat ${data.chatId} by ${user.username}`);
     } catch (error) {
-      this.logger.error('Send message error:', error);
-      client.emit('error', { message: 'Failed to send message' });
+      this.logger.error('Error sending message:', error);
+      client.emit('message_error', { 
+        tempId: data.tempId,
+        message: 'Failed to send message' 
+      });
     }
   }
 
-  @UseGuards(WsJwtGuard)
-  @SubscribeMessage('join_room')
-  async handleJoinRoom(
-    @MessageBody() data: JoinRoomDto,
-    @ConnectedSocket() client: AuthenticatedSocket,
+  @SubscribeMessage('edit_message')
+  @UseGuards(RateLimitGuard)
+  async handleEditMessage(
+    @MessageBody() data: EditMessageDto,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
-      await client.join(data.roomId);
-      await this.presenceService.addUserToRoom(client.user.userId, data.roomId);
+      const user = client.data.user;
+      
+      const editData = {
+        messageId: data.messageId,
+        chatId: data.chatId,
+        newContent: data.content,
+        editedBy: user.sub,
+        editedAt: new Date(),
+      };
 
-      // Notify other room members
-      client.to(data.roomId).emit('user_joined_room', {
-        userId: client.user.userId,
-        username: client.user.username,
-        roomId: data.roomId,
-        timestamp: new Date(),
-      });
+      // Broadcast edit to chat participants
+      this.server.to(`chat:${data.chatId}`).emit('message_edited', editData);
 
-      client.emit('room_joined', {
-        roomId: data.roomId,
-        timestamp: new Date(),
-      });
-
-      this.logger.log(`User ${client.user.userId} joined room ${data.roomId}`);
+      this.logger.debug(`Message ${data.messageId} edited by ${user.username}`);
     } catch (error) {
-      this.logger.error('Join room error:', error);
-      client.emit('error', { message: 'Failed to join room' });
+      this.logger.error('Error editing message:', error);
+      client.emit('error', { message: 'Failed to edit message' });
     }
   }
 
-  @UseGuards(WsJwtGuard)
-  @SubscribeMessage('leave_room')
-  async handleLeaveRoom(
-    @MessageBody() data: LeaveRoomDto,
-    @ConnectedSocket() client: AuthenticatedSocket,
+  @SubscribeMessage('delete_message')
+  @UseGuards(RateLimitGuard)
+  async handleDeleteMessage(
+    @MessageBody() data: DeleteMessageDto,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
-      await client.leave(data.roomId);
-      await this.presenceService.removeUserFromRoom(client.user.userId, data.roomId);
+      const user = client.data.user;
+      
+      const deleteData = {
+        messageId: data.messageId,
+        chatId: data.chatId,
+        deletedBy: user.sub,
+        deletedAt: new Date(),
+      };
 
-      // Notify other room members
-      client.to(data.roomId).emit('user_left_room', {
-        userId: client.user.userId,
-        username: client.user.username,
-        roomId: data.roomId,
-        timestamp: new Date(),
-      });
+      // Broadcast deletion to chat participants
+      this.server.to(`chat:${data.chatId}`).emit('message_deleted', deleteData);
 
-      client.emit('room_left', {
-        roomId: data.roomId,
-        timestamp: new Date(),
-      });
-
-      this.logger.log(`User ${client.user.userId} left room ${data.roomId}`);
+      this.logger.debug(`Message ${data.messageId} deleted by ${user.username}`);
     } catch (error) {
-      this.logger.error('Leave room error:', error);
-      client.emit('error', { message: 'Failed to leave room' });
+      this.logger.error('Error deleting message:', error);
+      client.emit('error', { message: 'Failed to delete message' });
     }
   }
 
-  @UseGuards(WsJwtGuard)
-  @SubscribeMessage('typing_start')
-  async handleTypingStart(
-    @MessageBody() data: TypingDto,
-    @ConnectedSocket() client: AuthenticatedSocket,
-  ) {
-    const typingData = {
-      userId: client.user.userId,
-      username: client.user.username,
-      roomId: data.roomId,
-      recipientId: data.recipientId,
-    };
-
-    if (data.roomId) {
-      client.to(data.roomId).emit('user_typing_start', typingData);
-    } else if (data.recipientId) {
-      const recipientSockets = await this.presenceService.getUserSockets(data.recipientId);
-      recipientSockets.forEach(socketId => {
-        this.server.to(socketId).emit('user_typing_start', typingData);
-      });
-    }
-  }
-
-  @UseGuards(WsJwtGuard)
-  @SubscribeMessage('typing_stop')
-  async handleTypingStop(
-    @MessageBody() data: TypingDto,
-    @ConnectedSocket() client: AuthenticatedSocket,
-  ) {
-    const typingData = {
-      userId: client.user.userId,
-      username: client.user.username,
-      roomId: data.roomId,
-      recipientId: data.recipientId,
-    };
-
-    if (data.roomId) {
-      client.to(data.roomId).emit('user_typing_stop', typingData);
-    } else if (data.recipientId) {
-      const recipientSockets = await this.presenceService.getUserSockets(data.recipientId);
-      recipientSockets.forEach(socketId => {
-        this.server.to(socketId).emit('user_typing_stop', typingData);
-      });
-    }
-  }
-
-  @UseGuards(WsJwtGuard)
-  @SubscribeMessage('message_reaction')
-  async handleMessageReaction(
+  @SubscribeMessage('add_reaction')
+  @UseGuards(RateLimitGuard)
+  async handleAddReaction(
     @MessageBody() data: MessageReactionDto,
-    @ConnectedSocket() client: AuthenticatedSocket,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
+      const user = client.data.user;
+      
       const reactionData = {
-        ...data,
-        userId: client.user.userId,
-        username: client.user.username,
+        messageId: data.messageId,
+        chatId: data.chatId,
+        emoji: data.emoji,
+        userId: user.sub,
+        username: user.username,
         timestamp: new Date(),
       };
 
-      // Publish to message queue for persistence
-      await this.rabbitMQService.publishMessage('message_queue', {
-        action: 'message_reaction',
-        data: reactionData,
-      });
+      // Broadcast reaction to chat participants
+      this.server.to(`chat:${data.chatId}`).emit('reaction_added', reactionData);
 
-      // Broadcast reaction to room or direct message participants
-      if (data.roomId) {
-        this.server.to(data.roomId).emit('message_reaction_added', reactionData);
-      } else {
-        // For direct messages, find the other participant
-        // This would need additional logic to determine the other participant
-      }
-
-      this.logger.log(`Reaction added by ${client.user.userId} to message ${data.messageId}`);
+      this.logger.debug(`Reaction ${data.emoji} added to message ${data.messageId}`);
     } catch (error) {
-      this.logger.error('Message reaction error:', error);
+      this.logger.error('Error adding reaction:', error);
       client.emit('error', { message: 'Failed to add reaction' });
     }
   }
 
-  @UseGuards(WsJwtGuard)
-  @SubscribeMessage('get_online_users')
-  async handleGetOnlineUsers(
-    @MessageBody() data: { roomId?: string },
-    @ConnectedSocket() client: AuthenticatedSocket,
+  @SubscribeMessage('remove_reaction')
+  @UseGuards(RateLimitGuard)
+  async handleRemoveReaction(
+    @MessageBody() data: MessageReactionDto,
+    @ConnectedSocket() client: Socket,
   ) {
     try {
-      let onlineUsers;
-      if (data.roomId) {
-        onlineUsers = await this.presenceService.getRoomOnlineUsers(data.roomId);
-      } else {
-        onlineUsers = await this.presenceService.getUserContacts(client.user.userId);
-      }
+      const user = client.data.user;
+      
+      const reactionData = {
+        messageId: data.messageId,
+        chatId: data.chatId,
+        emoji: data.emoji,
+        userId: user.sub,
+        timestamp: new Date(),
+      };
 
+      // Broadcast reaction removal to chat participants
+      this.server.to(`chat:${data.chatId}`).emit('reaction_removed', reactionData);
+
+      this.logger.debug(`Reaction ${data.emoji} removed from message ${data.messageId}`);
+    } catch (error) {
+      this.logger.error('Error removing reaction:', error);
+      client.emit('error', { message: 'Failed to remove reaction' });
+    }
+  }
+
+  @SubscribeMessage('typing_start')
+  @UseGuards(RateLimitGuard)
+  async handleTypingStart(
+    @MessageBody() data: TypingDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const user = client.data.user;
+      
+      // Store typing status in Redis with TTL
+      await this.redisService.set(
+        `typing:${data.chatId}:${user.sub}`,
+        {
+          userId: user.sub,
+          username: user.username,
+          chatId: data.chatId,
+          startedAt: new Date(),
+        },
+        10 // 10 seconds TTL
+      );
+
+      // Broadcast typing indicator
+      client.to(`chat:${data.chatId}`).emit('user_typing', {
+        userId: user.sub,
+        username: user.username,
+        chatId: data.chatId,
+        isTyping: true,
+      });
+
+      this.logger.debug(`User ${user.username} started typing in chat ${data.chatId}`);
+    } catch (error) {
+      this.logger.error('Error handling typing start:', error);
+    }
+  }
+
+  @SubscribeMessage('typing_stop')
+  @UseGuards(RateLimitGuard)
+  async handleTypingStop(
+    @MessageBody() data: TypingDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const user = client.data.user;
+      
+      // Remove typing status from Redis
+      await this.redisService.del(`typing:${data.chatId}:${user.sub}`);
+
+      // Broadcast typing stop
+      client.to(`chat:${data.chatId}`).emit('user_typing', {
+        userId: user.sub,
+        username: user.username,
+        chatId: data.chatId,
+        isTyping: false,
+      });
+
+      this.logger.debug(`User ${user.username} stopped typing in chat ${data.chatId}`);
+    } catch (error) {
+      this.logger.error('Error handling typing stop:', error);
+    }
+  }
+
+  @SubscribeMessage('mark_as_read')
+  @UseGuards(RateLimitGuard)
+  async handleMarkAsRead(
+    @MessageBody() data: MarkAsReadDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const user = client.data.user;
+      
+      const readData = {
+        chatId: data.chatId,
+        messageId: data.messageId,
+        userId: user.sub,
+        readAt: new Date(),
+      };
+
+      // Broadcast read receipt to chat participants
+      client.to(`chat:${data.chatId}`).emit('message_read', readData);
+
+      this.logger.debug(`Message ${data.messageId} marked as read by ${user.username}`);
+    } catch (error) {
+      this.logger.error('Error marking message as read:', error);
+    }
+  }
+
+  @SubscribeMessage('get_online_users')
+  async handleGetOnlineUsers(@ConnectedSocket() client: Socket) {
+    try {
+      const onlineUsers = await this.presenceService.getOnlineUsers();
+      const presenceData = await this.presenceService.getMultipleUserPresence(onlineUsers);
+      
       client.emit('online_users', {
-        roomId: data.roomId,
         users: onlineUsers,
+        presence: presenceData,
+        count: onlineUsers.length,
       });
     } catch (error) {
-      this.logger.error('Get online users error:', error);
+      this.logger.error('Error getting online users:', error);
       client.emit('error', { message: 'Failed to get online users' });
     }
   }
 
-  private generateMessageId(): string {
-    return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  @SubscribeMessage('update_presence')
+  async handleUpdatePresence(
+    @MessageBody() data: { status: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    try {
+      const user = client.data.user;
+      await this.presenceService.updateUserStatus(user.sub, data.status as any);
+      
+      client.emit('presence_updated', {
+        userId: user.sub,
+        status: data.status,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      this.logger.error('Error updating presence:', error);
+      client.emit('error', { message: 'Failed to update presence' });
+    }
+  }
+
+  // Method to broadcast message from external services (RabbitMQ events)
+  async broadcastMessage(chatId: string, messageData: any) {
+    this.server.to(`chat:${chatId}`).emit('new_message', messageData);
+  }
+
+  // Method to broadcast chat events from external services
+  async broadcastChatEvent(eventType: string, data: any) {
+    if (data.chatId) {
+      this.server.to(`chat:${data.chatId}`).emit(eventType, data);
+    }
+    
+    // Also broadcast to user rooms if needed
+    if (data.userIds && Array.isArray(data.userIds)) {
+      data.userIds.forEach(userId => {
+        this.server.to(`user:${userId}`).emit(eventType, data);
+      });
+    }
+  }
+
+  // Method to get server instance for external use
+  getServer(): Server {
+    return this.server;
   }
 }
