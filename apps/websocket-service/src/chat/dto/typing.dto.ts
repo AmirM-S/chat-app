@@ -13,14 +13,24 @@ export class TypingDto {
   message?: string;
 }
 
-export class TypingStartDto extends TypingDto {
-  @IsBoolean()
-  isTyping: true;
+export class TypingStartDto {
+  @IsUUID()
+  @IsNotEmpty()
+  chatId: string;
+
+  @IsOptional()
+  @IsString()
+  message?: string;
 }
 
-export class TypingStopDto extends TypingDto {
-  @IsBoolean()
-  isTyping: false;
+export class TypingStopDto {
+  @IsUUID()
+  @IsNotEmpty()
+  chatId: string;
+
+  @IsOptional()
+  @IsString()
+  message?: string;
 }
 
 export interface TypingData {
