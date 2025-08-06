@@ -100,9 +100,9 @@ export class EventListenerService implements OnModuleInit {
         }
       });
 
-      this.logger.log('🎧 Started listening for events');
+      this.logger.log('Started listening for events');
     } catch (error) {
-      this.logger.error('❌ Failed to start listening:', error);
+      this.logger.error('Failed to start listening:', error);
     }
   }
 

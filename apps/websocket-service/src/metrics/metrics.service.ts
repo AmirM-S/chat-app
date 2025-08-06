@@ -116,6 +116,26 @@ export class MetricsService {
     }
   }
 
+  async incrementEventsProcessed(): Promise<void> {
+    try {
+      // Total events processed
+      const totalKey = 'metrics:events:total';
+      await this.redisService.incr(totalKey);
+
+      // Events per minute
+      const minuteKey = `metrics:events:minute:${this.getCurrentMinute()}`;
+      await this.redisService.incr(minuteKey);
+      await this.redisService.expire(minuteKey, 120);
+
+      // Events per hour
+      const hourKey = `metrics:events:hour:${this.getCurrentHour()}`;
+      await this.redisService.incr(hourKey);
+      await this.redisService.expire(hourKey, 7200); // 2 hours
+    } catch (error) {
+      this.logger.error('Error incrementing events processed metrics:', error);
+    }
+  }
+
   async getMetrics(): Promise<MetricsData> {
     try {
       const [
