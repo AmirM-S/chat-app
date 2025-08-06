@@ -4,13 +4,11 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
-  UseGuards,
   MessageBody,
   ConnectedSocket,
-  UseFilters,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger, UseInterceptors } from '@nestjs/common';
+import { Logger, UseInterceptors, UseGuards, UseFilters } from '@nestjs/common';
 import { WsJwtGuard } from '../auth/guards/ws-jwt.guard';
 import { RateLimitGuard } from '../shared/guards/rate-limit.guard';
 import { WsExceptionFilter } from '../shared/filters/ws-exception.filter';
@@ -163,7 +161,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.server.to(`chat:${data.chatId}`).emit('new_message', messageData);
 
       // Update metrics
-      this.metricsService.incrementMessages();
+      this.metricsService.incrementMessage(data.chatId, data.content.length);
 
       this.logger.debug(`Message sent in chat ${data.chatId} by ${user.username}`);
     } catch (error) {
