@@ -3,6 +3,23 @@ import { ChatGateway } from '../../chat/chat.gateway';
 import { RedisService } from '../../redis/redis.service';
 import { ChatEvent } from '../../chat/interfaces/chat.interface';
 
+interface ChatMessage {
+  id: string;
+  content: string;
+  senderId: string;
+  senderName: string;
+  chatId: string;
+  timestamp: Date;
+  type?: string;
+  parentId?: string;
+  attachments?: any[];
+  reactions?: Record<string, string[]>;
+  edited?: boolean;
+  editedAt?: Date;
+  deleted?: boolean;
+  deletedAt?: Date;
+}
+
 @Injectable()
 export class ChatHandler {
   private readonly logger = new Logger(ChatHandler.name);
@@ -93,7 +110,7 @@ export class ChatHandler {
     
     // Update message reactions
     const messageKey = `chat:${chatId}:messages:${messageId}`;
-    const message = await this.redisService.get(messageKey);
+    const message = await this.redisService.get<ChatMessage>(messageKey);
     
     if (message) {
       if (!message.reactions) message.reactions = {};
@@ -120,7 +137,7 @@ export class ChatHandler {
     
     // Update message content
     const messageKey = `chat:${chatId}:messages:${messageId}`;
-    const message = await this.redisService.get(messageKey);
+    const message = await this.redisService.get<ChatMessage>(messageKey);
     
     if (message && message.senderId === userId) {
       message.content = content;
@@ -144,7 +161,7 @@ export class ChatHandler {
     
     // Mark message as deleted
     const messageKey = `chat:${chatId}:messages:${messageId}`;
-    const message = await this.redisService.get(messageKey);
+    const message = await this.redisService.get<ChatMessage>(messageKey);
     
     if (message && message.senderId === userId) {
       message.deleted = true;
