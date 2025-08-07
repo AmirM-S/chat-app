@@ -147,23 +147,23 @@ export class MetricsService {
         averageResponseTime,
         errorRate,
       ] = await Promise.all([
-        this.redisService.get<number>('metrics:connections:total') || 0,
-        this.redisService.get<number>('metrics:connections:active') || 0,
-        this.redisService.get<number>('metrics:messages:total') || 0,
-        this.redisService.get<number>('metrics:connections:peak') || 0,
+        this.redisService.get<number>('metrics:connections:total'),
+        this.redisService.get<number>('metrics:connections:active'),
+        this.redisService.get<number>('metrics:messages:total'),
+        this.redisService.get<number>('metrics:connections:peak'),
         this.getMessagesPerMinute(),
         this.getAverageResponseTime(),
         this.getErrorRate(),
       ]);
 
       return {
-        totalConnections,
-        activeUsers,
-        totalMessages,
+        totalConnections: totalConnections ?? 0,
+        activeUsers: activeUsers ?? 0,
+        totalMessages: totalMessages ?? 0,
         messagesPerMinute,
         averageResponseTime,
         errorRate,
-        peakConnections,
+        peakConnections: peakConnections ?? 0,
         lastUpdated: new Date(),
       };
     } catch (error) {
@@ -188,17 +188,17 @@ export class MetricsService {
         activeUsers,
         peakConnections,
       ] = await Promise.all([
-        this.redisService.get<number>('metrics:connections:total') || 0,
-        this.redisService.get<number>('metrics:connections:active') || 0,
-        this.redisService.get<number>('metrics:connections:peak') || 0,
+        this.redisService.get<number>('metrics:connections:total'),
+        this.redisService.get<number>('metrics:connections:active'),
+        this.redisService.get<number>('metrics:connections:peak'),
       ]);
 
       const averageConnectionsPerMinute = await this.getAverageConnectionsPerMinute();
 
       return {
-        totalConnections,
-        activeUsers,
-        peakConnections,
+        totalConnections: totalConnections ?? 0,
+        activeUsers: activeUsers ?? 0,
+        peakConnections: peakConnections ?? 0,
         averageConnectionsPerMinute,
       };
     } catch (error) {
@@ -219,7 +219,7 @@ export class MetricsService {
         messagesPerMinute,
         messagesPerHour,
       ] = await Promise.all([
-        this.redisService.get<number>('metrics:messages:total') || 0,
+        this.redisService.get<number>('metrics:messages:total'),
         this.getMessagesPerMinute(),
         this.getMessagesPerHour(),
       ]);
@@ -227,7 +227,7 @@ export class MetricsService {
       const averageMessageLength = await this.getAverageMessageLength();
 
       return {
-        totalMessages,
+        totalMessages: totalMessages ?? 0,
         messagesPerMinute,
         messagesPerHour,
         averageMessageLength,
