@@ -14,7 +14,7 @@ export interface JwtPayload {
 @Injectable()
 export class WsJwtStrategy extends PassportStrategy(Strategy, 'ws-jwt') {
   constructor(private configService: ConfigService) {
-    const jwtSecret = configService.get<string>('JWT_SECRET');
+    const jwtSecret = configService.get<string>('JWT_SECRET') || 'your-default-secret';
     if (!jwtSecret) {
       throw new Error('JWT_SECRET is not configured');
     }
