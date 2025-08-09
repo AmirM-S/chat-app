@@ -19,11 +19,11 @@ export class RabbitMQService implements OnModuleInit {
     private readonly chatGateway: ChatGateway,
   ) {}
 
-  async onModuleInit() {
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-    await this.connectWithRetry();
-    // await this.consumeBroadcastMessages();
-  }
+    async onModuleInit() {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await this.connectWithRetry();
+      // await this.consumeBroadcastMessages();
+    }
 
   private async connectWithRetry(retries = 10, delay = 2000) {
     try {
