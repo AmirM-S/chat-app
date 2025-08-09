@@ -14,7 +14,6 @@ export class RabbitMQService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    // Wait a bit for RabbitMQ to be fully ready
     await new Promise(resolve => setTimeout(resolve, 5000));
     await this.connectWithRetry();
     // await this.consumeBroadcastMessages();  
