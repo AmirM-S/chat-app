@@ -62,7 +62,7 @@ export class ProxyService {
         );
       }
 
-      // Service unavailable
+      /// Service unavailable
       throw new HttpException(
         `${service} service is currently unavailable`,
         HttpStatus.SERVICE_UNAVAILABLE
