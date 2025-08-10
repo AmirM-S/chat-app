@@ -70,7 +70,7 @@ export class ProxyService {
     }
   }
 
-  // Circuit breaker pattern - simple implementation
+  /// Circuit breaker pattern - simple implementation
   private serviceHealth = new Map<string, { failures: number; lastFailure: Date | null }>();
 
   async forwardRequestWithCircuitBreaker(
