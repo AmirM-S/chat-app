@@ -98,7 +98,7 @@ import {
           data: chat,
         };
       } catch (error) {
-        this.logger.error(`Update chat error: ${error.message}`, error.stack);
+        this.logger.error(`Chat update error: ${error.message}`, error.stack);
         throw error;
       }
     }
