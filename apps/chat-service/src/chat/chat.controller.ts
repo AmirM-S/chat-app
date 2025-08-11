@@ -174,7 +174,7 @@ import {
           message: 'Message marked as read',
         };
       } catch (error) {
-        this.logger.error(`Mark message as read error: ${error.message}`, error.stack);
+        this.logger.error(`Error marking message as read: ${error.message}`, error.stack);
         throw error;
       }
     }
