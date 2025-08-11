@@ -152,7 +152,7 @@ import {
         return {
           success: true,
           statusCode: HttpStatus.OK,
-          message: 'Messages retrieved successfully',
+          message: 'Messages have been retrieved successfully',
           data: result,
         };
       } catch (error) {
