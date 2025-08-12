@@ -28,7 +28,7 @@ export class ConnectionManager {
     try {
       const user = client.data.user;
       if (!user) {
-        this.logger.warn(`Connection rejected - no user data: ${client.id}`);
+        this.logger.warn(`Connection rejected - user data not found: ${client.id}`);
         client.disconnect();
         return;
       }
