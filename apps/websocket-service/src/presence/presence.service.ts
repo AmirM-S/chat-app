@@ -203,7 +203,7 @@ export class PresenceService {
         presence,
       });
     } catch (error) {
-      this.logger.error(`Failed to broadcast presence update for user ${userId}:`, error);
+      this.logger.error(`Failed to Broadcast presence update for user ${userId}:`, error);
     }
   }
 }
