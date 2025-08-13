@@ -84,7 +84,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // Send confirmation to client
       client.emit('joined_chat', {
         chatId,
-        message: 'joined chat successfully',
+        message: 'Joined chat successfully',
         timestamp: new Date(),
       });
 
