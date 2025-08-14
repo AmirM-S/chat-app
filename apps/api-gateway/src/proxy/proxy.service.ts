@@ -87,7 +87,7 @@ export class ProxyService {
       const timeSinceLastFailure = Date.now() - health.lastFailure.getTime();
       if (timeSinceLastFailure < 5 * 60 * 1000) { // 5 minutes
         throw new HttpException(
-          `${service} service is currently unavailable (circuit breaker open)`,
+          `${service} Service is currently unavailable (circuit breaker open)`,
           HttpStatus.SERVICE_UNAVAILABLE
         );
       }
