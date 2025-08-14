@@ -82,7 +82,7 @@ export class ProxyService {
   ): Promise<AxiosResponse> {
     const health = this.serviceHealth.get(service) || { failures: 0, lastFailure: null };
 
-    // Circuit breaker: if service has failed 3 times in last 5 minutes, don't try
+    // Circuit breaker: if service has failed 3 times in last 5 minutes, do not try to forward the request
     if (health.failures >= 3 && health.lastFailure) {
       const timeSinceLastFailure = Date.now() - health.lastFailure.getTime();
       if (timeSinceLastFailure < 5 * 60 * 1000) { // 5 minutes
