@@ -81,6 +81,7 @@ export class ChatService {
         ),
       });
 
+      console.log('chat', chat);
       const savedChat = await chat.save();
 
       // Invalidate user's chat list cache
