@@ -4,10 +4,7 @@ import { RedisModule } from '../redis/redis.module';
 
 @Module({
   imports: [RedisModule],
-
-  
   providers: [PresenceService],
   exports: [PresenceService],
 })
-
 export class PresenceModule {}
