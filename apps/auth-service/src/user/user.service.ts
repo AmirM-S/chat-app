@@ -1,4 +1,8 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User, UserStatus } from './user.entity';
@@ -53,10 +57,7 @@ export class UserService {
 
   async findByEmailOrUsername(emailOrUsername: string): Promise<User | null> {
     return await this.userRepository.findOne({
-      where: [
-        { email: emailOrUsername },
-        { username: emailOrUsername },
-      ],
+      where: [{ email: emailOrUsername }, { username: emailOrUsername }],
     });
   }
 
@@ -78,8 +79,13 @@ export class UserService {
     });
   }
 
-  async updateRefreshToken(userId: string, refreshToken: string | null): Promise<void> {
-    const hashedRefreshToken = refreshToken ? await bcrypt.hash(refreshToken, 10) : null;
+  async updateRefreshToken(
+    userId: string,
+    refreshToken: string | null,
+  ): Promise<void> {
+    const hashedRefreshToken = refreshToken
+      ? await bcrypt.hash(refreshToken, 10)
+      : null;
     await this.userRepository.update(userId, {
       refreshToken: hashedRefreshToken as string | null | undefined,
     });
@@ -125,7 +131,11 @@ export class UserService {
       },
     });
 
-    if (!user || !user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+    if (
+      !user ||
+      !user.passwordResetExpires ||
+      user.passwordResetExpires < new Date()
+    ) {
       throw new NotFoundException('Invalid or expired reset token');
     }
 
@@ -137,4 +147,4 @@ export class UserService {
 
     return await this.userRepository.save(user);
   }
-} 
+}
