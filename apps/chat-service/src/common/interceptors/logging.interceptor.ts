@@ -19,7 +19,7 @@ export class LoggingInterceptor implements NestInterceptor {
     const startTime = Date.now();
 
     const observable = next.handle() as any;
-    
+
     return observable.pipe(
       tap((data: any) => {
         const duration = Date.now() - startTime;
