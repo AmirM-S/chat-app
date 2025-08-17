@@ -46,7 +46,10 @@ export class CacheService {
         await this.redis.del(...keys);
       }
     } catch (error) {
-      this.logger.error(`Cache delete pattern error for pattern ${pattern}:`, error);
+      this.logger.error(
+        `Cache delete pattern error for pattern ${pattern}:`,
+        error,
+      );
     }
   }
 
@@ -73,7 +76,10 @@ export class CacheService {
     try {
       await this.redis.hset(key, field, JSON.stringify(value));
     } catch (error) {
-      this.logger.error(`Cache hash set error for key ${key}, field ${field}:`, error);
+      this.logger.error(
+        `Cache hash set error for key ${key}, field ${field}:`,
+        error,
+      );
     }
   }
 
@@ -82,7 +88,10 @@ export class CacheService {
       const value = await this.redis.hget(key, field);
       return value ? JSON.parse(value) : null;
     } catch (error) {
-      this.logger.error(`Cache hash get error for key ${key}, field ${field}:`, error);
+      this.logger.error(
+        `Cache hash get error for key ${key}, field ${field}:`,
+        error,
+      );
       return null;
     }
   }
