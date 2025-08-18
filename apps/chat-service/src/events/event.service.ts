@@ -23,7 +23,11 @@ export class EventsService {
     this.eventEmitter.emit('message.updated', message);
   }
 
-  emitMessagesRead(chatId: string, userId: string, messageIds?: string[]): void {
+  emitMessagesRead(
+    chatId: string,
+    userId: string,
+    messageIds?: string[],
+  ): void {
     this.eventEmitter.emit('messages.read', { chatId, userId, messageIds });
   }
 
