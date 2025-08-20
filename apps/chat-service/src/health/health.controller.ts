@@ -16,6 +16,7 @@ export class HealthController {
     @InjectRedis() private readonly redis: Redis,
   ) {}
 
+  
   @Get()
   @HealthCheck()
   check() {
