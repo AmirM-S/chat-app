@@ -34,7 +34,7 @@ export class HealthController {
       return {
         redis: {
           status: 'down',
-          error: error.message || 'Redis connection failed',
+          error: error.message || 'redis connection failed',
         },
       };
     }
