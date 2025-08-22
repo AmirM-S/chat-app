@@ -8,6 +8,7 @@ export class SearchDto extends PaginationDto {
   @MaxLength(100)
   query: string;
 
+  
   @IsString()
   @IsOptional()
   chatId?: string;
