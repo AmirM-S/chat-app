@@ -31,8 +31,6 @@ export class CacheService {
     }
   }
 
-
-  
   async delete(key: string): Promise<void> {
     try {
       await this.redis.del(key);
