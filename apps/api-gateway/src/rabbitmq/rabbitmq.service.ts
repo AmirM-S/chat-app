@@ -23,7 +23,6 @@ export class RabbitMQService implements OnModuleInit {
       await new Promise((resolve) => setTimeout(resolve, 5000));
       await this.connectWithRetry();
       // await this.consumeBroadcastMessages();
-      
     }
 
   private async connectWithRetry(retries = 10, delay = 2000) {
