@@ -70,17 +70,3 @@ export class ChatGateway
     this.server.emit('chat:message', formattedMessage);
   }
 }
-// @SubscribeMessage('send_message')
-  // async handleMessage(client: Socket, payload: any): Promise<void> {
-  //   const user = (client as any).user;
-
-  //   const saved = await this.messageModel.create({
-  //     senderId: user.sub,
-  //     receiverId: payload.receiverId,
-  //     message: payload.message,
-  //   });
-
-  //   this.logger.log(`Message saved from ${user.username}`);
-  //   this.server.emit('receive_message', saved);
-  // }
-// }
