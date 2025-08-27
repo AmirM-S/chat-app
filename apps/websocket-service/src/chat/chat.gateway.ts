@@ -216,7 +216,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         deletedAt: new Date(),
       };
 
-      // Broadcast deletion to chat participants
+      // broadcast deletion to chat participants
       this.server.to(`chat:${data.chatId}`).emit('message_deleted', deleteData);
 
       this.logger.debug(`Message ${data.messageId} deleted by ${user.username}`);
