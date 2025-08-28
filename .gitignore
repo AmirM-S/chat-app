@@ -42,7 +42,6 @@ volumes/
 
 # Ignore Swagger auto-generated files if any
 swagger-static/
-
 # pm2 logs/pids
 pids/
 *.pid
