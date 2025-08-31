@@ -5,7 +5,6 @@ import { Socket } from 'socket.io';
 @Catch()
 export class WsExceptionFilter extends BaseWsExceptionFilter {
   private readonly logger = new Logger(WsExceptionFilter.name);
-
   catch(exception: any, host: ArgumentsHost) {
     const client = host.switchToWs().getClient<Socket>();
     
