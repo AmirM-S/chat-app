@@ -40,7 +40,7 @@ This project implements a distributed chat system with the following services:
 1. **Clone the repository**
 ```bash
    git clone 
-   cd microservices-chat-app
+   cd chat-app
 ```
 
 2. **Start with Docker Compose**
